@@ -2,5 +2,4 @@ streamlit==1.37.1
 plotly==5.22.0
 pandas==2.2.2
 requests==2.32.3
-py3Dmol==2.2.4
 streamlit-lottie==0.0.5
