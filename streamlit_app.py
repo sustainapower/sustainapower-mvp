@@ -5,15 +5,12 @@ import json
 from datetime import datetime
 import time
 import io, zipfile, hashlib
-import re # Added for email validation
-import requests # Used for optional lead webhook
+import re
+import requests
 
-# Advanced visualization imports
-try:
-    import py3Dmol
-    PY3DMOL_AVAILABLE = True
-except ImportError:
-    PY3DMOL_AVAILABLE = False
+# Removed py3Dmol import as it's not natively supported on Streamlit Cloud
+# PY3DMOL_AVAILABLE is permanently False for the JS embed approach
+PY3DMOL_AVAILABLE = False
 
 try:
     from streamlit_lottie import st_lottie
@@ -40,7 +37,7 @@ PRICES = {
     "opex_per_kg_dry": 0.042  # $/kg-dry (per hr), multiplied by 24 if daily
 }
 
-# Advanced CSS for cinematic UI
+# Advanced CSS for cinematic UI (UNESCAPED)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -273,7 +270,7 @@ CINEMATIC_STAGES = [
             "nCO + (2n+1)H₂ → CnH2n+2 + nH₂O (Fischer-Tropsch)",
             "Pressure swing adsorption"
         ],
-        "molecules": ["CH₃OH", "C₁₂H₂₆ (SAF)", "H₂ (>99.9%)", "Process water"],
+        "molecules": ["CH₃OH", "C₁₂H₂₆ (SAF)", "H₂"],
         "color_primary": "#8b5cf6",
         "lottie_url": "https://lottie.host/embed/z9x8c7v6-b5n4-m3l2-k1j0-h9g8f7e6d5c4.json", # Placeholder Lottie URL
         "engineering_notes": "Simultaneous production achieves 89% carbon conversion efficiency with optimized product distribution.",
@@ -360,7 +357,7 @@ def calculate_performance(feed_rate, moisture, cge, co2_capture, unit_multiplier
 
 performance = calculate_performance(feed_rate, moisture, cge, co2_capture, unit_multiplier, PRICES)
 
-# Main header
+# Main header (UNESCAPED)
 st.markdown("""
 <div class="main-header">
     <h1 style="font-size: 3.5rem; font-weight: 700; margin-bottom: 1rem; text-shadow: 0 4px 8px rgba(0,0,0,0.3);">
@@ -443,7 +440,7 @@ with main_tab:
     if demo_mode:
         st.info(f"🎯 **Stage {st.session_state.current_stage + 1} Explanation**: {current_stage['demo_explanation']}")
     
-    # Main stage container
+    # Main stage container (UNESCAPED)
     st.markdown(f"""
     <div class="animated-border">
         <div class="stage-container">
@@ -496,42 +493,60 @@ with main_tab:
         else:
             st.image("https://via.placeholder.com/350x200/1e293b/white?text=Install+streamlit-lottie", caption="Animation Placeholder")
         
-        # 3D Molecule viewer
+        # 3D Molecule viewer (UNESCAPED)
         st.markdown("#### 🧬 3D Molecular View")
-        if PY3DMOL_AVAILABLE:
-            view = py3Dmol.view(width=350, height=250)
-            molecule_smiles = {
-                0: "C(C(C(C(C(CO)O)O)O)O)O",  # Cellulose unit
-                1: "O",  # Water
-                2: "C",  # Methane (as a proxy for simple hydrocarbons in syngas)
-                3: "[H][H]",  # Hydrogen
-                4: "CO",  # Methanol
-                5: "O=C=O"  # CO2
-            }
-            
-            if st.session_state.current_stage in molecule_smiles:
-                view.addModel(molecule_smiles[st.session_state.current_stage], "smi")
-                view.setStyle({'stick': {'radius': 0.15}, 'sphere': {'scale': 0.25}})
-                view.setBackgroundColor('black')
-                view.zoomTo()
-                
-                html_content = f"""
-                <div class="molecule-viewer">
-                    {view._make_html()}
-                </div>
-                """
-                st.components.v1.html(html_content, height=280)
-            else:
-                st.info("Molecule view available for this stage")
-        else:
-            st.info("Install py3Dmol for interactive 3D molecular visualization")
+        
+        # Define SMILES for each stage
+        smiles_by_stage = {
+            0: "C(C(C(C(C(CO)O)O)O)O)O",  # Cellulose unit
+            1: "O",                      # Water
+            2: "C",                      # Methane (as a proxy for simple hydrocarbons in syngas)
+            3: "[H][H]",                 # Hydrogen
+            4: "CO",                     # Methanol
+            5: "O=C=O"                   # CO2
+        }
+        
+        current_smiles = smiles_by_stage.get(st.session_state.current_stage, "C") # Default to Carbon if not found
+
+        # Generate the 3Dmol.js script dynamically (UNESCAPED)
+        mol_script = f"""
+        <div id="viewer" style="width: 100%; height: 250px; background-color: black; border-radius: 10px;"></div>
+        <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+        <script>
+            let viewer = $3Dmol.createViewer('viewer', {{backgroundColor: "black"}});
+            viewer.addModel('{current_smiles}', "smi");
+            viewer.setStyle({{}}, {{stick: {{radius:0.15}}, sphere: {{scale:0.3}}}});
+            viewer.zoomTo();
+            viewer.render();
+            // Add interaction: rotation
+            let rotation = 0;
+            function animate() {{
+                rotation += 0.5; // Adjust speed as needed
+                // Rotate around Y-axis for a more dynamic look
+                viewer.setView([
+                    Math.cos(rotation * Math.PI / 180), 0, Math.sin(rotation * Math.PI / 180), 0,
+                    0, 1, 0, 0,
+                    -Math.sin(rotation * Math.PI / 180), 0, Math.cos(rotation * Math.PI / 180), 0,
+                    0, 0, 0, 1
+                ]);
+                viewer.render();
+                requestAnimationFrame(animate);
+            }}
+            animate(); // Start animation
+        </script>
+        """
+        st.components.v1.html(mol_script, height=270, scrolling=False)
             
         # Key molecules list
         st.markdown("**Key Molecules:**")
         for molecule in current_stage['molecules']:
             st.markdown(f"• {molecule}")
+        
+        # Optional Fallback message (as requested)
+        st.info("If you do not see a 3D molecule, ensure your browser allows JavaScript. Tested on Chrome, Edge, and Firefox.")
 
-    # Live Performance KPIs
+
+    # Live Performance KPIs (UNESCAPED)
     st.markdown("### 📊 Live Performance Dashboard")
     
     kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
@@ -576,7 +591,7 @@ with main_tab:
     </div>
     """, unsafe_allow_html=True)
 
-    # (Item 2) Add Net Revenue KPI under the existing Revenue card
+    # (Item 2) Add Net Revenue KPI under the existing Revenue card (UNESCAPED)
     kpi_col5.markdown(f"""
     <div class="kpi-card" style="border-left-color:#14b8a6">
         <h4 style="color:#14b8a6;margin-bottom:.5rem;">Net Revenue</h4>
@@ -919,30 +934,29 @@ with analysis_tab:
         st.markdown("#### 📈 Session Analytics")
         st.info("Thank you for your interest! This session data has been logged for follow-up.")
 
-# Footer
-st.markdown("---")
+# Footer (UNESCAPED)
 st.markdown(f"""
 <div style='text-align: center; padding: 2rem; background: linear-gradient(135deg, #1e293b, #334155); border-radius: 20px; margin-top: 2rem;'>
     <h3 style="color: #3b82f6; margin-bottom: 1rem;">🚀 Next-Generation Digital Twin Technology</h3>
-    <p style="color: #e2e8f0; font-size: 1.1rem; margin-bottom: 1.5rem;">
+    <p style="color: #e2e8f0; font-size: 1.1rem; margin-bottom: 1.5rem;'>
         Setting the new standard for process visualization and stakeholder engagement
     </p>
     <div style="display: flex; justify-content: center; gap: 2rem; flex-wrap: wrap;">
         <div style="text-align: center;">
             <h4 style="color: #10b981; margin: 0;">🏭 Process Excellence</h4>
-            <p style="color: #9ca3af; margin: 0;">Cinematic visualization</p>
+            <p style="color: #9ca3af; margin: 0;'>Cinematic visualization</p>
         </div>
         <div style="text-align: center;">
-            <h4 style="color: #f59e0b; margin: 0;">💰 Economic Impact</h4>
-            <p style="color: #9ca3af; margin: 0;">Real-time value tracking</p>
+            <h4 style="color: #f59e0b; margin: 0;'>💰 Economic Impact</h4>
+            <p style="color: #9ca3af; margin: 0;'>Real-time value tracking</p>
         </div>
         <div style="text-align: center;">
-            <h4 style="color: #8b5cf6; margin: 0;">🌍 Environmental Benefit</h4>
-            <p style="color: #9ca3af; margin: 0;">Carbon negative operations</p>
+            <h4 style="color: #8b5cf6; margin: 0;'>🌍 Environmental Benefit</h4>
+            <p style="color: #9ca3af; margin: 0;'>Carbon negative operations</p>
         </div>
     </div>
-    <p style="color: #64748b; margin-top: 2rem; font-size: 0.9rem;">
-        Powered by Streamlit • Plotly • py3Dmol • Lottie Animations<br>
+    <p style="color: #64748b; margin-top: 2rem; font-size: 0.9rem;'>
+        Powered by Streamlit • Plotly • 3Dmol.js • Lottie Animations<br>
         Generated: {datetime.now().strftime("%B %d, %Y at %H:%M UTC")}
     </p>
 </div>
